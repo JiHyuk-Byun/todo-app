@@ -85,10 +85,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func showScheduler() {
         if schedulerWindow == nil {
             let host = NSHostingController(rootView: SchedulerView().environmentObject(store))
+            // SwiftUI의 minHeight를 창 최소 크기로 반영 → 핀이 늘면 창이 아래로 자동 확장.
+            host.sizingOptions = .minSize
             let w = NSWindow(contentViewController: host)
             w.title = "스케줄러"
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            w.setContentSize(NSSize(width: 960, height: 680))
+            w.setContentSize(NSSize(width: 960, height: 760))
             w.isReleasedWhenClosed = false
             w.center()
             schedulerWindow = w

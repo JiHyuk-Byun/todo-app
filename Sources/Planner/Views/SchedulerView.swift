@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 별도 창으로 열리는 스케줄러. 상단에서 [일정 | 목표]를 전환한다.
 struct SchedulerView: View {
@@ -6,11 +7,32 @@ struct SchedulerView: View {
     @ObservedObject private var ui = UIState.shared
     @State private var selectedDay = Date()
 
+    // 본문(배너+탭+달력)이 필요로 하는 기본 높이.
+    private let baseHeight: CGFloat = 540
+
+    /// 화면 안에서 고정목표가 차지할 수 있는 최대 높이.
+    private var pinnedAllowed: CGFloat {
+        let screen = (NSScreen.main?.visibleFrame.height ?? 1000) - 60
+        return max(120, screen - baseHeight)
+    }
+
+    /// 고정목표 내용 높이(라벨+행).
+    private var pinnedContentHeight: CGFloat {
+        let count = store.pinnedGoals().count
+        return count > 0 ? CGFloat(count) * 30 + 30 : 0
+    }
+
+    /// 핀 개수에 따라 커지는 창 최소 높이(화면 상한 내).
+    private var dynamicMinHeight: CGFloat {
+        baseHeight + min(pinnedContentHeight, pinnedAllowed)
+    }
+
     var body: some View {
+        // 순서: 오늘의 말씀 → 고정 목표 → 탭 바 → 본문. (평평한 VStack이라 탭이 안 가려짐)
         VStack(spacing: 0) {
             VerseBanner { ui.schedulerTab = .verse }
             Divider()
-            PinnedGoalsBar()
+            PinnedGoalsList(fixedMaxHeight: pinnedAllowed)
             topBar
             Divider()
             Group {
@@ -21,8 +43,11 @@ struct SchedulerView: View {
                 case .stats: StatsView()
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()   // 창이 짧아도 본문이 위(탭 바)로 겹쳐 그려지지 않게
         }
-        .frame(minWidth: 820, minHeight: 600)
+        // 핀이 늘면 창 최소 높이가 커지고, 창이 그에 맞춰 아래로 자동 확장된다.
+        .frame(minWidth: 720, minHeight: dynamicMinHeight)
         .overlay(BadgeUnlockOverlay())
     }
 
@@ -45,6 +70,7 @@ struct SchedulerView: View {
             .keyboardShortcut("t", modifiers: .command)
         }
         .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 52)
     }
 
     private var schedulePane: some View {

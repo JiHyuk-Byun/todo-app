@@ -25,35 +25,48 @@ struct HorizonChip: View {
     }
 }
 
-/// 상단에 고정된 목표 모음. List + .onMove로 네이티브 드래그(삽입 위치 표시) 통일.
-struct PinnedGoalsBar: View {
+/// 상단에 고정된 목표 목록. 내용 높이에 맞추되 maxHeight를 넘으면 그 안에서만 스크롤.
+/// 중첩 List 충돌을 피하려 ScrollView + VStack으로 구성하고, 행은 drag&drop으로 재정렬.
+struct PinnedGoalsList: View {
     @EnvironmentObject private var store: Store
+    var fixedMaxHeight: CGFloat = 240
+
+    private let rowHeight: CGFloat = 30   // 스크롤 여부 판단용 추정값
 
     var body: some View {
         let pinned = store.pinnedGoals()
         if !pinned.isEmpty {
+            let estimated = CGFloat(pinned.count) * rowHeight
             VStack(alignment: .leading, spacing: 2) {
                 Label("고정한 목표", systemImage: "pin.fill")
                     .font(.caption2.bold())
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 14)
-                    .padding(.top, 2)
+                    .padding(.top, 4)
 
-                List {
-                    ForEach(pinned) { goal in
-                        PinnedGoalRow(goal: goal)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 14, bottom: 2, trailing: 14))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    }
-                    .onMove { store.movePinned(from: $0, to: $1) }
+                if estimated > fixedMaxHeight {
+                    ScrollView { rows(pinned) }
+                        .frame(height: fixedMaxHeight)
+                } else {
+                    rows(pinned)   // 자연 높이 = 내용에 딱 맞음(빈 공백 없음)
                 }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-                .scrollDisabled(true)
-                .frame(height: CGFloat(pinned.count) * 30 + 4)
+
+                Divider()
             }
-            .padding(.bottom, 4)
+        }
+    }
+
+    private func rows(_ pinned: [GoalItem]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(pinned) { goal in
+                PinnedGoalRow(goal: goal)
+                    .draggable(goal.id.uuidString)
+                    .dropDestination(for: String.self) { items, _ in
+                        guard let s = items.first, let id = UUID(uuidString: s) else { return false }
+                        store.movePinned(id: id, before: goal.id)
+                        return true
+                    }
+            }
         }
     }
 }
@@ -87,5 +100,8 @@ private struct PinnedGoalRow: View {
             .buttonStyle(.plain)
             .help("상단 고정 해제")
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }

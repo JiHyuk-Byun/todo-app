@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 커스텀 월간 캘린더. 날짜별 할 일 유무/완료를 점으로 표시하고,
 /// 선택 pill·오늘 ring·월 이동을 제공한다.
@@ -7,6 +8,11 @@ struct MonthCalendarView: View {
     @Binding var selection: Date
 
     @State private var month: Date = Date()   // 표시 중인 달의 기준 날짜
+    @State private var scrollAccum: CGFloat = 0
+    @State private var gestureShifted = false  // 한 트랙패드 제스처당 1회만 이동
+    @State private var isOverCalendar = false
+    @State private var scrollMonitor: Any?
+    @State private var showMonthPicker = false
     private let cal = Calendar.current
 
     var body: some View {
@@ -15,7 +21,57 @@ struct MonthCalendarView: View {
             weekdayHeader
             grid
         }
-        .onAppear { month = selection }
+        .onContinuousHover { phase in
+            switch phase {
+            case .active: isOverCalendar = true
+            case .ended: isOverCalendar = false
+            }
+        }
+        .onAppear { month = selection; installScrollMonitor() }
+        .onDisappear { removeScrollMonitor(); isOverCalendar = false }
+    }
+
+    /// 마우스가 달력 위에 있을 때의 스크롤만 가로채 월을 바꾼다(다른 곳 스크롤은 그대로).
+    private func installScrollMonitor() {
+        guard scrollMonitor == nil else { return }
+        scrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard isOverCalendar else { return event }
+            handleScroll(event)
+            return nil
+        }
+    }
+
+    private func removeScrollMonitor() {
+        if let m = scrollMonitor { NSEvent.removeMonitor(m); scrollMonitor = nil }
+    }
+
+    /// 스크롤로 월 이동: 위로 → 다음 달, 아래로 → 이전 달.
+    /// 관성(momentum)은 무시하고, 트랙패드 한 제스처당 한 달만 이동.
+    private func handleScroll(_ event: NSEvent) {
+        if event.momentumPhase != [] { return }          // 관성 스크롤 무시
+        let threshold: CGFloat = 8
+
+        if event.phase != [] {
+            // 트랙패드 제스처
+            if event.phase == .began { gestureShifted = false; scrollAccum = 0 }
+            if event.phase == .ended || event.phase == .cancelled {
+                gestureShifted = false; scrollAccum = 0; return
+            }
+            if !gestureShifted {
+                scrollAccum += event.scrollingDeltaY
+                if abs(scrollAccum) >= threshold {
+                    shiftMonth(scrollAccum < 0 ? 1 : -1)
+                    gestureShifted = true
+                }
+            }
+        } else {
+            // 마우스 휠(단계 정보 없음): 노치당 한 번
+            scrollAccum += event.scrollingDeltaY
+            if abs(scrollAccum) >= threshold {
+                shiftMonth(scrollAccum < 0 ? 1 : -1)
+                scrollAccum = 0
+            }
+        }
     }
 
     // MARK: Header
@@ -28,8 +84,16 @@ struct MonthCalendarView: View {
             .buttonStyle(.borderless)
 
             Spacer()
-            Text(month.formatted(.dateTime.year().month()))
-                .font(.headline)
+            Button { showMonthPicker.toggle() } label: {
+                Text(month.formatted(.dateTime.year().month()))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+            }
+            .buttonStyle(.plain)
+            .help("연·월 선택")
+            .popover(isPresented: $showMonthPicker, arrowEdge: .bottom) {
+                MonthYearPicker(month: $month)
+            }
             Spacer()
 
             Button { shiftMonth(1) } label: {
@@ -102,6 +166,59 @@ struct MonthCalendarView: View {
             d = cal.date(byAdding: .day, value: 1, to: d) ?? d
         }
         return days
+    }
+}
+
+/// 연·월 선택 팝오버.
+private struct MonthYearPicker: View {
+    @Binding var month: Date
+    private let cal = Calendar.current
+    @State private var year = 2026
+    @State private var mon = 1
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                Picker("", selection: $year) {
+                    ForEach(yearRange, id: \.self) { Text(String(format: "%d년", $0)).tag($0) }
+                }
+                .labelsHidden()
+                .frame(width: 110)
+
+                Picker("", selection: $mon) {
+                    ForEach(1...12, id: \.self) { Text("\($0)월").tag($0) }
+                }
+                .labelsHidden()
+                .frame(width: 80)
+            }
+            Button("오늘로 이동") { setToday() }
+                .buttonStyle(.borderless)
+        }
+        .padding(16)
+        .onAppear {
+            year = cal.component(.year, from: month)
+            mon = cal.component(.month, from: month)
+        }
+        .onChange(of: year) { _, _ in apply() }
+        .onChange(of: mon) { _, _ in apply() }
+    }
+
+    private var yearRange: [Int] {
+        let y = cal.component(.year, from: Date())
+        return Array((y - 10)...(y + 10))
+    }
+
+    private func apply() {
+        var c = DateComponents()
+        c.year = year; c.month = mon; c.day = 1
+        if let d = cal.date(from: c) { month = d }
+    }
+
+    private func setToday() {
+        let now = Date()
+        year = cal.component(.year, from: now)
+        mon = cal.component(.month, from: now)
+        month = now
     }
 }
 

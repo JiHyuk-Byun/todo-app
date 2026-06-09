@@ -61,10 +61,10 @@ struct EditableChecklistRow: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
-            if let pinned, (pinned || hovering), !isEditing {
+            if let pinned, !isEditing {
                 Button { onTogglePin?() } label: {
                     Image(systemName: pinned ? "pin.fill" : "pin")
-                        .foregroundStyle(pinned ? Color.accentColor : .secondary)
+                        .foregroundStyle(pinned ? Color.accentColor : Color.secondary)
                         .font(.caption)
                 }
                 .buttonStyle(.plain)

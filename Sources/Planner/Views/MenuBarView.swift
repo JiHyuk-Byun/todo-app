@@ -35,7 +35,7 @@ struct MenuBarView: View {
                 AppDelegate.shared?.openSchedulerFromMenu()
             }
             Divider()
-            PinnedGoalsBar()
+            PinnedGoalsList(fixedMaxHeight: 220)
             header
             Divider()
 
@@ -342,7 +342,6 @@ private struct GoalCategoryGroup: View {
 private struct GoalRow: View {
     @EnvironmentObject private var store: Store
     let goal: GoalItem
-    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -359,19 +358,16 @@ private struct GoalRow: View {
 
             Spacer()
 
-            if goal.pinned || hovering {
-                Button { store.togglePinGoal(goal) } label: {
-                    Image(systemName: goal.pinned ? "pin.fill" : "pin")
-                        .font(.caption)
-                        .foregroundStyle(goal.pinned ? Color.accentColor : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help(goal.pinned ? "상단 고정 해제" : "상단에 고정")
+            Button { store.togglePinGoal(goal) } label: {
+                Image(systemName: goal.pinned ? "pin.fill" : "pin")
+                    .font(.caption)
+                    .foregroundStyle(goal.pinned ? Color.accentColor : Color.secondary)
             }
+            .buttonStyle(.plain)
+            .help(goal.pinned ? "상단 고정 해제" : "상단에 고정")
         }
         .padding(.leading, 32)
         .padding(.trailing, 14)
         .padding(.vertical, 4)
-        .onHover { hovering = $0 }
     }
 }

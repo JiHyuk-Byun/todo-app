@@ -58,8 +58,7 @@ struct VerseView: View {
 
     @State private var attempt = ""
     @State private var lastResult: Bool? = nil   // nil=미제출, true=정답, false=오답
-    @State private var revealed = false          // 제출 후 원문 공개
-    @State private var peeking = false           // 엿보기
+    @State private var peeking = false           // 엿보기(가리기) 상태 — 유지됨
     @State private var editing = false           // 등록/수정 폼
     @State private var draftText = ""
     @State private var draftRef = ""
@@ -154,16 +153,12 @@ struct VerseView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                let shown = peeking || revealed
-                Button(shown ? "가리기" : "엿보기") {
-                    if shown { peeking = false; revealed = false }
-                    else { peeking = true }
-                }
+                Button(peeking ? "가리기" : "엿보기") { peeking.toggle() }
                 Button("말씀 수정") { startEdit(v) }
             }
 
-            // 원문: 엿보기 또는 제출 후에만 표시
-            if peeking || revealed {
+            // 원문은 엿보기(가리기) 상태만 따른다. 제출해도 자동 공개하지 않음.
+            if peeking {
                 Text(v.text)
                     .font(.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -212,7 +207,6 @@ struct VerseView: View {
     private func submit() {
         let ok = store.recite(attempt, on: Date())
         lastResult = ok
-        revealed = true
         if ok {
             Haptics.success()
             confetti += 1
@@ -223,8 +217,7 @@ struct VerseView: View {
     private func resetAttempt() {
         attempt = ""
         lastResult = nil
-        revealed = false
-        peeking = false
+        // peeking(엿보기/가리기) 상태는 유지한다.
     }
 
     private func startEdit(_ v: Verse) {
