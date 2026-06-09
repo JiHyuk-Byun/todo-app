@@ -11,6 +11,12 @@ TARGET="arm64-apple-macosx14.0"
 echo "▶ Cleaning ./$APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/Resources"
+
+if [ -f icon/AppIcon.icns ]; then
+  echo "▶ Adding app icon"
+  cp icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+fi
 
 echo "▶ Compiling Swift sources"
 xcrun swiftc \
@@ -18,9 +24,7 @@ xcrun swiftc \
   -target "$TARGET" \
   -parse-as-library \
   -O \
-  Sources/Planner/*.swift \
-  Sources/Planner/Models/*.swift \
-  Sources/Planner/Views/*.swift \
+  $(find Sources/Planner -name '*.swift') \
   -o "$APP/Contents/MacOS/Planner"
 
 echo "▶ Writing Info.plist"
@@ -35,6 +39,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleShortVersionString</key> <string>1.0</string>
     <key>CFBundleVersion</key>         <string>1</string>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
+    <key>CFBundleIconName</key>        <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <!-- Dock 아이콘 없이 메뉴바 전용으로 실행 -->
     <key>LSUIElement</key>             <true/>

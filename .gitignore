@@ -9,3 +9,6 @@ Planner.app/
 
 # SwiftPM
 .swiftpm/
+
+# Icon intermediates (regenerated from icon/make_icon.swift; AppIcon.icns is kept)
+icon/AppIcon.iconset/
