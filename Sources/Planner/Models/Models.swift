@@ -203,7 +203,20 @@ enum GoalHorizon: String, Codable, CaseIterable, Identifiable {
         case .vision: return "sparkles"
         }
     }
+
+    /// 기간 구분용 색상(배지 등).
+    var tintName: HorizonTint {
+        switch self {
+        case .week: return .blue
+        case .month: return .green
+        case .year: return .orange
+        case .vision: return .purple
+        }
+    }
 }
+
+/// SwiftUI 비의존 색상 토큰(뷰에서 Color로 매핑).
+enum HorizonTint { case blue, green, orange, purple }
 
 /// 한 기간(periodKey)에 속한 목표 항목.
 struct GoalItem: Identifiable, Codable, Hashable {
@@ -217,10 +230,15 @@ struct GoalItem: Identifiable, Codable, Hashable {
     var createdAt: Date = Date()
     /// 영성/전문성 분류.
     var category: TodoCategory = .spirituality
+    /// 상단에 고정 여부.
+    var pinned: Bool = false
+    /// 고정 목표들 사이의 정렬 순서.
+    var pinIndex: Int = 0
 
     init(id: UUID = UUID(), title: String, isDone: Bool = false,
          horizon: GoalHorizon, periodKey: String, sortIndex: Int = 0,
-         createdAt: Date = Date(), category: TodoCategory = .spirituality) {
+         createdAt: Date = Date(), category: TodoCategory = .spirituality,
+         pinned: Bool = false, pinIndex: Int = 0) {
         self.id = id
         self.title = title
         self.isDone = isDone
@@ -229,10 +247,12 @@ struct GoalItem: Identifiable, Codable, Hashable {
         self.sortIndex = sortIndex
         self.createdAt = createdAt
         self.category = category
+        self.pinned = pinned
+        self.pinIndex = pinIndex
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, title, isDone, horizon, periodKey, sortIndex, createdAt, category
+        case id, title, isDone, horizon, periodKey, sortIndex, createdAt, category, pinned, pinIndex
     }
 
     init(from decoder: Decoder) throws {
@@ -245,6 +265,52 @@ struct GoalItem: Identifiable, Codable, Hashable {
         sortIndex = try c.decodeIfPresent(Int.self, forKey: .sortIndex) ?? 0
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         category = try c.decodeIfPresent(TodoCategory.self, forKey: .category) ?? .spirituality
+        pinned = try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false
+        pinIndex = try c.decodeIfPresent(Int.self, forKey: .pinIndex) ?? 0
+    }
+}
+
+// MARK: - Verse (말씀 암송)
+
+/// 그날의 말씀과 암송 진행.
+struct Verse: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    /// 속한 날짜(자정 정규화).
+    var day: Date
+    /// 출처/참조 (예: "요한복음 3:16"). 선택.
+    var reference: String = ""
+    /// 외워야 할 원문.
+    var text: String
+    /// 완벽히 일치한 암송 횟수.
+    var credits: Int = 0
+    /// 전체 시도 횟수.
+    var attempts: Int = 0
+    var createdAt: Date = Date()
+
+    init(id: UUID = UUID(), day: Date, reference: String = "", text: String,
+         credits: Int = 0, attempts: Int = 0, createdAt: Date = Date()) {
+        self.id = id
+        self.day = day
+        self.reference = reference
+        self.text = text
+        self.credits = credits
+        self.attempts = attempts
+        self.createdAt = createdAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, day, reference, text, credits, attempts, createdAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        day = try c.decode(Date.self, forKey: .day)
+        reference = try c.decodeIfPresent(String.self, forKey: .reference) ?? ""
+        text = try c.decode(String.self, forKey: .text)
+        credits = try c.decodeIfPresent(Int.self, forKey: .credits) ?? 0
+        attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
+        createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
     }
 }
 
@@ -255,22 +321,31 @@ struct PlannerData: Codable {
     var todos: [TodoItem] = []
     var rules: [RecurringRule] = []
     var goals: [GoalItem] = []
+    var verses: [Verse] = []
+    /// 획득한 배지 id → 획득 시각.
+    var unlockedBadges: [String: Date] = [:]
 
-    init(todos: [TodoItem] = [], rules: [RecurringRule] = [], goals: [GoalItem] = []) {
+    init(todos: [TodoItem] = [], rules: [RecurringRule] = [],
+         goals: [GoalItem] = [], verses: [Verse] = [],
+         unlockedBadges: [String: Date] = [:]) {
         self.todos = todos
         self.rules = rules
         self.goals = goals
+        self.verses = verses
+        self.unlockedBadges = unlockedBadges
     }
 
     enum CodingKeys: String, CodingKey {
-        case todos, rules, goals
+        case todos, rules, goals, verses, unlockedBadges
     }
 
-    // 기존 data.json(goals 키 없음)도 디코딩되도록.
+    // 기존 data.json(goals/verses/unlockedBadges 키 없음)도 디코딩되도록.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         todos = try c.decodeIfPresent([TodoItem].self, forKey: .todos) ?? []
         rules = try c.decodeIfPresent([RecurringRule].self, forKey: .rules) ?? []
         goals = try c.decodeIfPresent([GoalItem].self, forKey: .goals) ?? []
+        verses = try c.decodeIfPresent([Verse].self, forKey: .verses) ?? []
+        unlockedBadges = try c.decodeIfPresent([String: Date].self, forKey: .unlockedBadges) ?? [:]
     }
 }

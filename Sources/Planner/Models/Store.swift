@@ -8,6 +8,8 @@ final class Store: ObservableObject {
     static let shared = Store()
 
     @Published private(set) var data = PlannerData()
+    /// 방금 새로 획득한 배지(연출 후 dismiss로 비움).
+    @Published private(set) var justUnlocked: [Badge] = []
 
     private let calendar = Calendar.current
     private let fileURL: URL
@@ -46,7 +48,18 @@ final class Store: ObservableObject {
         }
     }
 
+    private var evaluatingBadges = false
+
     private func save() {
+        writeFile()
+        if !evaluatingBadges {
+            evaluatingBadges = true
+            checkBadges()
+            evaluatingBadges = false
+        }
+    }
+
+    private func writeFile() {
         guard let raw = try? JSONEncoder.planner.encode(data) else { return }
         try? raw.write(to: fileURL, options: .atomic)
     }
@@ -305,6 +318,124 @@ final class Store: ObservableObject {
         save()
     }
 
+    func togglePinGoal(_ goal: GoalItem) {
+        guard let idx = data.goals.firstIndex(where: { $0.id == goal.id }) else { return }
+        if !data.goals[idx].pinned {
+            // 새로 고정 → 맨 뒤 순서로.
+            let maxPin = data.goals.filter(\.pinned).map(\.pinIndex).max() ?? -1
+            data.goals[idx].pinIndex = maxPin + 1
+        }
+        data.goals[idx].pinned.toggle()
+        save()
+    }
+
+    /// 상단에 고정된 목표들(사용자 지정 순서 pinIndex).
+    func pinnedGoals() -> [GoalItem] {
+        data.goals
+            .filter { $0.pinned }
+            .sorted { ($0.pinIndex, $0.createdAt) < ($1.pinIndex, $1.createdAt) }
+    }
+
+    /// 고정 목표 드래그 정렬.
+    func movePinned(from source: IndexSet, to destination: Int) {
+        var items = pinnedGoals()
+        items.move(fromOffsets: source, toOffset: destination)
+        for (i, item) in items.enumerated() {
+            if let idx = data.goals.firstIndex(where: { $0.id == item.id }) {
+                data.goals[idx].pinIndex = i
+            }
+        }
+        save()
+    }
+
+    // MARK: - 지표(성취/통계)
+
+    func completedTodoCount() -> Int { data.todos.filter(\.isDone).count }
+    func completedGoalCount() -> Int { data.goals.filter(\.isDone).count }
+
+    /// 그날 materialized todo가 ≥1이고 전부 완료.
+    func dayFullyDone(_ day: Date) -> Bool {
+        let items = data.todos.filter { calendar.isDate($0.day, inSameDayAs: day) }
+        return !items.isEmpty && items.allSatisfy(\.isDone)
+    }
+
+    func perfectDayCount() -> Int {
+        let days = Set(data.todos.map { calendar.startOfDay(for: $0.day) })
+        return days.filter { dayFullyDone($0) }.count
+    }
+
+    /// 오늘(미완료면 어제)부터 역방향으로 자격일 연속 수.
+    private func streak(_ qualifies: (Date) -> Bool) -> Int {
+        var count = 0
+        var day = calendar.startOfDay(for: Date())
+        if !qualifies(day) {
+            guard let y = calendar.date(byAdding: .day, value: -1, to: day) else { return 0 }
+            day = y
+        }
+        while qualifies(day) {
+            count += 1
+            guard let prev = calendar.date(byAdding: .day, value: -1, to: day) else { break }
+            day = prev
+        }
+        return count
+    }
+
+    func todoStreak() -> Int { streak { dayFullyDone($0) } }
+    func verseStreak() -> Int { streak { (verse(on: $0)?.credits ?? 0) > 0 } }
+
+    func totalCredits() -> Int { data.verses.reduce(0) { $0 + $1.credits } }
+    func versesRecitedCount() -> Int { data.verses.filter { $0.credits > 0 }.count }
+    func maxVerseCredits() -> Int { data.verses.map(\.credits).max() ?? 0 }
+
+    /// 최근 7일 완료율(done/total). todo 없으면 0.
+    func weeklyCompletionRate() -> Double {
+        let today = calendar.startOfDay(for: Date())
+        var total = 0, done = 0
+        for offset in 0..<7 {
+            guard let d = calendar.date(byAdding: .day, value: -offset, to: today) else { continue }
+            let items = data.todos.filter { calendar.isDate($0.day, inSameDayAs: d) }
+            total += items.count
+            done += items.filter(\.isDone).count
+        }
+        return total == 0 ? 0 : Double(done) / Double(total)
+    }
+
+    // MARK: - 배지
+
+    private func checkBadges() {
+        var newly: [Badge] = []
+        for badge in Achievements.all where data.unlockedBadges[badge.id] == nil {
+            if badge.isUnlocked(self) {
+                data.unlockedBadges[badge.id] = Date()
+                newly.append(badge)
+            }
+        }
+        if !newly.isEmpty {
+            justUnlocked.append(contentsOf: newly)
+            save()   // unlockedBadges 영속(재진입 가드로 무한루프 방지)
+        }
+    }
+
+    func dismissUnlocked() { justUnlocked = [] }
+
+    /// 단일 이동(드래그앤드롭용): id를 destination 인덱스로 옮긴다.
+    func movePinned(id: UUID, before destinationID: UUID?) {
+        var items = pinnedGoals()
+        guard let from = items.firstIndex(where: { $0.id == id }) else { return }
+        let moved = items.remove(at: from)
+        if let destinationID, let to = items.firstIndex(where: { $0.id == destinationID }) {
+            items.insert(moved, at: to)
+        } else {
+            items.append(moved)
+        }
+        for (i, item) in items.enumerated() {
+            if let idx = data.goals.firstIndex(where: { $0.id == item.id }) {
+                data.goals[idx].pinIndex = i
+            }
+        }
+        save()
+    }
+
     func moveGoals(_ horizon: GoalHorizon, category: TodoCategory,
                    from source: IndexSet, to destination: Int,
                    periodKey: String? = nil) {
@@ -317,6 +448,65 @@ final class Store: ObservableObject {
             }
         }
         save()
+    }
+
+    // MARK: - Verse (말씀 암송)
+
+    func verse(on day: Date) -> Verse? {
+        let target = calendar.startOfDay(for: day)
+        return data.verses.first { calendar.isDate($0.day, inSameDayAs: target) }
+    }
+
+    func todayVerse() -> Verse? { verse(on: Date()) }
+
+    /// 모든 말씀(최근 날짜 우선).
+    func allVerses() -> [Verse] {
+        data.verses.sorted { $0.day > $1.day }
+    }
+
+    /// 오늘을 제외한 지난 말씀(최근 우선).
+    func pastVerses() -> [Verse] {
+        let today = calendar.startOfDay(for: Date())
+        return allVerses().filter { !calendar.isDate($0.day, inSameDayAs: today) }
+    }
+
+    /// 그날 말씀 등록/수정. text가 바뀌면 새 말씀이므로 credits/attempts 리셋.
+    func setVerse(text: String, reference: String, on day: Date) {
+        let target = calendar.startOfDay(for: day)
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedRef = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let idx = data.verses.firstIndex(where: { calendar.isDate($0.day, inSameDayAs: target) }) {
+            if data.verses[idx].text != trimmedText {
+                data.verses[idx].text = trimmedText
+                data.verses[idx].credits = 0
+                data.verses[idx].attempts = 0
+            }
+            data.verses[idx].reference = trimmedRef
+        } else {
+            data.verses.append(Verse(day: target, reference: trimmedRef, text: trimmedText))
+        }
+        save()
+    }
+
+    func deleteVerse(on day: Date) {
+        let target = calendar.startOfDay(for: day)
+        data.verses.removeAll { calendar.isDate($0.day, inSameDayAs: target) }
+        save()
+    }
+
+    /// 암송 시도. 원문과 양끝 공백/개행만 무시하고 완전 일치하면 credit++.
+    @discardableResult
+    func recite(_ attempt: String, on day: Date) -> Bool {
+        let target = calendar.startOfDay(for: day)
+        guard let idx = data.verses.firstIndex(where: { calendar.isDate($0.day, inSameDayAs: target) })
+        else { return false }
+        let correct = data.verses[idx].text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = attempt.trimmingCharacters(in: .whitespacesAndNewlines)
+        data.verses[idx].attempts += 1
+        let matched = !correct.isEmpty && typed == correct
+        if matched { data.verses[idx].credits += 1 }
+        save()
+        return matched
     }
 }
 

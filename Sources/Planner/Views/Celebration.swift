@@ -8,6 +8,48 @@ enum Haptics {
     }
 }
 
+/// 배지 획득 시 상단에 잠깐 뜨는 배너 + 콘페티. store.justUnlocked를 관찰한다.
+struct BadgeUnlockOverlay: View {
+    @EnvironmentObject private var store: Store
+    @State private var confetti = 0
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.clear
+            if let badge = store.justUnlocked.first {
+                HStack(spacing: 10) {
+                    Image(systemName: badge.systemImage)
+                        .font(.title3)
+                        .foregroundStyle(.yellow)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("🏅 업적 달성!").font(.caption.bold())
+                        Text(badge.title).font(.callout.weight(.semibold))
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(Capsule().fill(.regularMaterial))
+                .overlay(Capsule().stroke(.yellow.opacity(0.5), lineWidth: 1))
+                .shadow(radius: 8, y: 2)
+                .padding(.top, 10)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .allowsHitTesting(false)
+        .overlay(ConfettiView(trigger: confetti))
+        .animation(.snappy(duration: 0.25), value: store.justUnlocked.count)
+        .onChange(of: store.justUnlocked.count) { _, n in
+            guard n > 0 else { return }
+            confetti += 1
+            Haptics.success()
+            Task {
+                try? await Task.sleep(nanoseconds: 2_800_000_000)
+                store.dismissUnlocked()
+            }
+        }
+    }
+}
+
 /// trigger 값이 바뀔 때마다 가운데에서 콘페티가 터진다. 클릭을 가로채지 않는다.
 struct ConfettiView: View {
     var trigger: Int

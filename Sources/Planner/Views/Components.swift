@@ -23,6 +23,8 @@ struct EditableChecklistRow: View {
     let isDone: Bool
     var recurring: Bool = false
     var deleteHelp: String = "삭제"
+    var pinned: Bool? = nil          // nil이면 핀 버튼 없음
+    var onTogglePin: (() -> Void)? = nil
     var onToggle: () -> Void
     var onCommitTitle: (String) -> Void
     var onDelete: () -> Void
@@ -58,6 +60,15 @@ struct EditableChecklistRow: View {
                 Image(systemName: "repeat")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+            }
+            if let pinned, (pinned || hovering), !isEditing {
+                Button { onTogglePin?() } label: {
+                    Image(systemName: pinned ? "pin.fill" : "pin")
+                        .foregroundStyle(pinned ? Color.accentColor : .secondary)
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help(pinned ? "상단 고정 해제" : "상단에 고정")
             }
             if hovering && !isEditing {
                 Button(role: .destructive, action: onDelete) {

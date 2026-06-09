@@ -30,6 +30,12 @@ struct MenuBarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            VerseBanner {
+                UIState.shared.schedulerTab = .verse
+                AppDelegate.shared?.openSchedulerFromMenu()
+            }
+            Divider()
+            PinnedGoalsBar()
             header
             Divider()
 
@@ -51,7 +57,7 @@ struct MenuBarView: View {
             // 팝오버 안에서 ScrollView는 이상적 높이를 0으로 보고하므로 측정해서 높이를 준다.
             // 단, 체크 토글 때 재측정으로 팝오버가 들썩이지 않도록, 높이는 "구조(행 개수/펼침)가
             // 바뀔 때"만 측정값으로 갱신한다. 토글은 구조를 안 바꾸므로 높이 고정.
-            .frame(height: min(contentHeight, 460))
+            .frame(height: min(contentHeight, 520))
             .animation(nil, value: contentHeight)
             .onPreferenceChange(ContentHeightKey.self) { h in
                 measuredHeight = h
@@ -67,8 +73,9 @@ struct MenuBarView: View {
             Divider()
             footer
         }
-        .frame(width: 320)
+        .frame(width: 360)
         .overlay(ConfettiView(trigger: confettiTrigger))
+        .overlay(BadgeUnlockOverlay())
         .onChange(of: todayAllDone) { _, done in
             if done { confettiTrigger += 1 }
         }
@@ -86,6 +93,8 @@ struct MenuBarView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            StreakChip(days: store.todoStreak(), tint: .orange)
+            StreakChip(days: store.verseStreak(), tint: .purple)
             if !todos.isEmpty {
                 Text("\(doneCount)/\(todos.count)")
                     .font(.callout.monospacedDigit())
@@ -333,23 +342,36 @@ private struct GoalCategoryGroup: View {
 private struct GoalRow: View {
     @EnvironmentObject private var store: Store
     let goal: GoalItem
+    @State private var hovering = false
 
     var body: some View {
-        Button {
-            if !goal.isDone { Haptics.success() }
-            store.toggleGoal(goal)
-        } label: {
-            HStack(spacing: 8) {
+        HStack(spacing: 8) {
+            Button {
+                if !goal.isDone { Haptics.success() }
+                store.toggleGoal(goal)
+            } label: {
                 CheckCircle(isDone: goal.isDone)
-                HashtagLabel(text: goal.title, isDone: goal.isDone)
-                    .font(.callout)
-                Spacer()
             }
-            .contentShape(Rectangle())
-            .padding(.leading, 32)
-            .padding(.trailing, 14)
-            .padding(.vertical, 4)
+            .buttonStyle(.plain)
+
+            HashtagLabel(text: goal.title, isDone: goal.isDone)
+                .font(.callout)
+
+            Spacer()
+
+            if goal.pinned || hovering {
+                Button { store.togglePinGoal(goal) } label: {
+                    Image(systemName: goal.pinned ? "pin.fill" : "pin")
+                        .font(.caption)
+                        .foregroundStyle(goal.pinned ? Color.accentColor : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(goal.pinned ? "상단 고정 해제" : "상단에 고정")
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.leading, 32)
+        .padding(.trailing, 14)
+        .padding(.vertical, 4)
+        .onHover { hovering = $0 }
     }
 }

@@ -1,6 +1,8 @@
 import SwiftUI
 
-/// 주간/월간/1년/비전 목표를 기간 → 영성/전문성 하위그룹의 체크리스트로 편집한다.
+/// 기간(이번 주/달/올해/비전)을 하나의 섹션으로, 그 안에서 영성/전문성으로 나눠 편집한다.
+/// 카테고리를 ForEach 중첩 없이 명시적으로 배치해 각 목표 ForEach가 Section의
+/// 직접 자식이 되도록 → 드래그 정렬이 동작한다.
 struct GoalsView: View {
     @EnvironmentObject private var store: Store
 
@@ -8,25 +10,8 @@ struct GoalsView: View {
         List {
             ForEach(GoalHorizon.allCases) { horizon in
                 Section {
-                    ForEach(TodoCategory.allCases) { category in
-                        CategorySubheader(horizon: horizon, category: category)
-
-                        ForEach(store.goals(horizon, category: category)) { goal in
-                            EditableChecklistRow(
-                                title: goal.title,
-                                isDone: goal.isDone,
-                                onToggle: { store.toggleGoal(goal) },
-                                onCommitTitle: { var g = goal; g.title = $0; store.updateGoal(g) },
-                                onDelete: { store.deleteGoal(goal) }
-                            )
-                            .padding(.leading, 12)
-                        }
-                        .onMove { store.moveGoals(horizon, category: category, from: $0, to: $1) }
-
-                        // add 입력란은 (horizon,category)별 독립 @State를 위해 별도 뷰 + 명시적 id.
-                        GoalAddRow(horizon: horizon, category: category)
-                            .id("goaladd-\(horizon.rawValue)-\(category.rawValue)")
-                    }
+                    categoryGroup(horizon, .spirituality)
+                    categoryGroup(horizon, .professional)
                 } header: {
                     GoalSectionHeader(horizon: horizon)
                 }
@@ -35,8 +20,31 @@ struct GoalsView: View {
         .listStyle(.inset)
         .animation(.snappy(duration: 0.2), value: store.data.goals)
     }
+
+    @ViewBuilder
+    private func categoryGroup(_ horizon: GoalHorizon, _ category: TodoCategory) -> some View {
+        CategorySubheader(horizon: horizon, category: category)
+
+        ForEach(store.goals(horizon, category: category)) { goal in
+            EditableChecklistRow(
+                title: goal.title,
+                isDone: goal.isDone,
+                pinned: goal.pinned,
+                onTogglePin: { store.togglePinGoal(goal) },
+                onToggle: { store.toggleGoal(goal) },
+                onCommitTitle: { var g = goal; g.title = $0; store.updateGoal(g) },
+                onDelete: { store.deleteGoal(goal) }
+            )
+            .padding(.leading, 10)
+        }
+        .onMove { store.moveGoals(horizon, category: category, from: $0, to: $1) }
+
+        GoalAddRow(horizon: horizon, category: category)
+            .id("goaladd-\(horizon.rawValue)-\(category.rawValue)")
+    }
 }
 
+/// 기간 섹션 헤더 — 색 칩으로 기간 구분.
 private struct GoalSectionHeader: View {
     @EnvironmentObject private var store: Store
     let horizon: GoalHorizon
@@ -44,8 +52,7 @@ private struct GoalSectionHeader: View {
     var body: some View {
         let c = store.goalCounts(horizon)
         HStack(spacing: 8) {
-            Label(horizon.label, systemImage: horizon.systemImage)
-                .font(.headline)
+            HorizonChip(horizon: horizon)
             Text(store.periodSubtitle(horizon))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -56,11 +63,11 @@ private struct GoalSectionHeader: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
     }
 }
 
-/// 기간 섹션 내부의 영성/전문성 소제목.
+/// 섹션 안 영성/전문성 소제목.
 private struct CategorySubheader: View {
     @EnvironmentObject private var store: Store
     let horizon: GoalHorizon
@@ -82,7 +89,7 @@ private struct CategorySubheader: View {
                     .foregroundStyle(.tertiary)
             }
         }
-        .padding(.top, 4)
+        .padding(.top, 6)
     }
 }
 
@@ -103,7 +110,7 @@ private struct GoalAddRow: View {
                              placeholder: "\(category.label) 목표 추가…",
                              onSubmit: add)
         }
-        .padding(.leading, 12)
+        .padding(.leading, 10)
     }
 
     private func add() {

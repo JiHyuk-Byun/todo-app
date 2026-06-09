@@ -61,7 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func setupPopover() {
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 320, height: 420)
+        popover.contentSize = NSSize(width: 360, height: 480)
         popover.contentViewController = NSHostingController(
             rootView: MenuBarView().environmentObject(store))
     }
@@ -88,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let w = NSWindow(contentViewController: host)
             w.title = "스케줄러"
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            w.setContentSize(NSSize(width: 860, height: 600))
+            w.setContentSize(NSSize(width: 960, height: 680))
             w.isReleasedWhenClosed = false
             w.center()
             schedulerWindow = w

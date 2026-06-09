@@ -1,52 +1,75 @@
-# Planner — macOS 메뉴바 Todo 앱
+# Planner — a macOS menu‑bar to‑do, goals & scripture app
 
-맥북 상단 메뉴바에서 오늘 할 일을 체크하고, 스케줄러에서 날짜별 계획과 반복 일정을 관리하는 SwiftUI 앱입니다.
+A lightweight macOS menu‑bar app for daily focus: check off today's tasks, track weekly/monthly/yearly goals and a long‑term vision, and memorize a daily scripture (말씀) — with streaks, stats and achievement badges to keep you motivated. Built in SwiftUI/AppKit.
 
-## 기능
-- **메뉴바 드롭다운** — 상단바의 체크리스트 아이콘을 클릭하면 오늘의 할 일이 나오고, 원형 체크박스로 완료를 토글합니다. 하단 입력창으로 바로 추가도 가능합니다.
-- **스케줄러 창** — 달력에서 날짜를 고르면 그 날의 할 일을 추가/수정/삭제할 수 있습니다.
-- **반복 일정** — "매일 운동", "매주 월·수·금"처럼 반복 규칙을 만들면 해당 날짜에 자동으로 할 일이 생성됩니다 (🔁 아이콘 표시).
-- **로컬 저장** — `~/Library/Application Support/Planner/data.json` 에 자동 저장됩니다.
+## Features
 
-## 빌드 & 실행
+### Menu‑bar dropdown
+- Click the menu‑bar icon (or a global hotkey) to open a dropdown showing **today's tasks**, grouped into **영성 (spirituality)** and **전문성 (professionalism)** sections, each with its own quick‑add field.
+- Check items off with satisfying feedback: **haptics, a bouncing checkmark, and a small confetti burst** per check; a **full confetti** celebration when a day is 100% complete.
+- A pinned **"오늘의 말씀" (today's scripture)** banner and a **pinned‑goals** strip stay at the top.
+- **🔥 streak chips** (tasks / scripture) in the header.
+
+### Scheduler window — `[일정 | 목표 | 말씀 | 통계]`
+- **일정 (Schedule):** a custom month calendar (per‑day completion shown as `done/total` + a mini progress bar, fully‑done days highlighted green) on the left with recurring rules below; the selected day's tasks on the right with inline edit, drag‑to‑reorder, swipe / right‑click actions, and notes.
+- **목표 (Goals):** weekly / monthly / yearly / vision checklists, each split into 영성 / 전문성, with drag‑to‑reorder. Periods roll over automatically.
+- **말씀 (Scripture memorization):** register the day's verse, then recite it from memory — the original is hidden while you type; on submit it's an **exact match** (every character and space) to earn a credit, otherwise nothing. Includes a peek button, edit, and a history of past verses.
+- **통계 (Stats):** task & scripture streaks, weekly completion rate, totals, and a grid of **achievement badges**.
+
+### Recurring rules
+Daily or weekly (by weekday) rules with a start date and optional end date, an editable form, a category, "next occurrence" preview, "skip just this day", and a delete confirmation.
+
+### Hashtags
+Type `#keyword` and it renders as a **colored pill** — each keyword gets its own consistent color. Pills render live in input fields (atomic delete) and in displayed items.
+
+### Global hotkeys & settings
+- System‑wide hotkeys (Carbon, no accessibility permission needed) to toggle the dropdown / scheduler. Defaults: **⌥⌘T** (dropdown), **⌥⌘S** (scheduler).
+- A Settings window lets you record custom shortcuts (persisted in `UserDefaults`).
+
+### Achievements
+28 badges across tasks completed, perfect days, streaks, goals, and scripture (credits, streaks, mastery). Unlocking one shows a banner + confetti.
+
+## Data
+All data is stored locally as JSON at `~/Library/Application Support/Planner/data.json`. The model uses backward‑compatible decoders, so updating the app never breaks existing data.
+
+## Build & run
+Requires Xcode / the matching Swift toolchain (macOS 14+).
+
 ```bash
-./build.sh        # Planner.app 생성
-open ./Planner.app # 메뉴바에 아이콘 등장
-```
-종료는 메뉴바 드롭다운의 "종료" 버튼.
-
-## ⚠️ 빌드 전 필요: 툴체인 복구
-현재 이 맥의 Command Line Tools가 깨져 있습니다
-(컴파일러 `swiftlang-6.2.1.4.8` ↔ SDK `swiftlang-6.2.1.4.7` 불일치).
-이 상태에서는 `import Foundation` 한 줄짜리 프로그램도 컴파일되지 않습니다.
-
-다음 중 하나로 복구하세요:
-
-**A. Command Line Tools 재설치 (간단)**
-```bash
-sudo rm -rf /Library/Developer/CommandLineTools
-sudo xcode-select --install
+./build.sh        # compiles Sources/Planner/**.swift into Planner.app (direct swiftc) and embeds the icon
+open ./Planner.app # a checklist icon appears in the menu bar (no Dock icon — it's an accessory app)
 ```
 
-**B. 전체 Xcode 설치 (권장 — 배포용 .app/서명/아카이브에 유리)**
-App Store에서 Xcode 설치 후:
-```bash
-sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-```
+Quit from the dropdown's **종료** button. To keep it always running, move `Planner.app` to `/Applications` and add it to **System Settings → General → Login Items**.
 
-복구 후 `./build.sh` 를 다시 실행하면 됩니다.
+> `build.sh` is used instead of `swift build` because the project ships as a hand‑assembled `.app` bundle (with `Info.plist` `LSUIElement` and an icon) rather than a SwiftPM executable. It compiles every `*.swift` under `Sources/Planner`.
 
-## 구조
+## App icon
+`icon/make_icon.swift` generates `icon/AppIcon.icns` (purple‑gradient rounded square + checkmark); `build.sh` copies it into the bundle.
+
+## Project layout
 ```
 Sources/Planner/
-  PlannerApp.swift          # @main, MenuBarExtra + 스케줄러 Window, accessory 모드
+  PlannerApp.swift            # @main; Settings scene only — AppDelegate owns the
+                              # NSStatusItem + NSPopover (dropdown), scheduler NSWindow, hotkeys
+  HotKey/HotKeyManager.swift  # Carbon global hotkeys
   Models/
-    Models.swift            # TodoItem, RecurringRule, Frequency, PlannerData
-    Store.swift             # 영속화 + 반복 일정 자동 생성(materialize)
+    Models.swift              # TodoItem, RecurringRule, GoalItem, Verse, TodoCategory, PlannerData
+    Store.swift               # persistence, queries, metrics, badge evaluation (Store.shared)
+    Achievements.swift        # badge catalog
+    ShortcutSettings.swift    # hotkey settings (UserDefaults)
+    UIState.swift             # shared UI state (selected scheduler tab)
   Views/
-    MenuBarView.swift       # 메뉴바 드롭다운 (오늘 할 일 + 체크)
-    SchedulerView.swift     # 달력 + 날짜별 편집 + 반복 일정 관리
+    MenuBarView.swift         # dropdown
+    SchedulerView.swift       # scheduler window + tab switcher
+    MonthCalendarView.swift   # custom month calendar
+    GoalsView.swift           # goals tab
+    VerseView.swift           # scripture tab + today's‑verse banner
+    StatsView.swift           # stats dashboard + badges
+    PinnedGoals.swift         # pinned goals bar + horizon chips
+    Components.swift          # shared checklist row, quick‑add field
+    HashtagText.swift         # hashtag pills (display + live editable field)
+    Celebration.swift         # confetti, haptics, badge‑unlock overlay
+    MenuBarIcon.swift         # code‑drawn menu‑bar icon
+    ShortcutRecorder.swift / SettingsView.swift
 ```
-
-> 참고: `Package.swift` 도 포함돼 있으나, 같은 툴체인 문제로 SwiftPM 매니페스트 컴파일이
-> 실패합니다. 툴체인 복구 후에는 `swift run` 또는 `./build.sh` 둘 다 사용 가능합니다.

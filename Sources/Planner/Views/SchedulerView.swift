@@ -3,42 +3,42 @@ import SwiftUI
 /// 별도 창으로 열리는 스케줄러. 상단에서 [일정 | 목표]를 전환한다.
 struct SchedulerView: View {
     @EnvironmentObject private var store: Store
+    @ObservedObject private var ui = UIState.shared
     @State private var selectedDay = Date()
-    @State private var tab: Tab = .schedule
-
-    enum Tab: String, CaseIterable, Identifiable {
-        case schedule = "일정"
-        case goals = "목표"
-        var id: String { rawValue }
-    }
 
     var body: some View {
         VStack(spacing: 0) {
+            VerseBanner { ui.schedulerTab = .verse }
+            Divider()
+            PinnedGoalsBar()
             topBar
             Divider()
             Group {
-                switch tab {
+                switch ui.schedulerTab {
                 case .schedule: schedulePane
                 case .goals: GoalsView()
+                case .verse: VerseView()
+                case .stats: StatsView()
                 }
             }
         }
-        .frame(minWidth: 760, minHeight: 540)
+        .frame(minWidth: 820, minHeight: 600)
+        .overlay(BadgeUnlockOverlay())
     }
 
     private var topBar: some View {
         HStack(spacing: 12) {
-            Picker("", selection: $tab) {
-                ForEach(Tab.allCases) { Text($0.rawValue).tag($0) }
+            Picker("", selection: $ui.schedulerTab) {
+                ForEach(SchedulerTab.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 220)
+            .frame(width: 360)
 
             Spacer()
 
             Button {
-                withAnimation(.snappy) { selectedDay = Date(); tab = .schedule }
+                withAnimation(.snappy) { selectedDay = Date(); ui.schedulerTab = .schedule }
             } label: {
                 Label("오늘", systemImage: "calendar.circle")
             }

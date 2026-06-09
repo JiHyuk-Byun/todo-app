@@ -115,32 +115,54 @@ private struct DayCell: View {
 
     private let cal = Calendar.current
 
+    private var complete: Bool { status.total > 0 && status.done == status.total }
+
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 3) {
             Text("\(cal.component(.day, from: day))")
                 .font(.system(size: 12, weight: isSelected ? .bold : .regular))
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(isSelected ? Color.accentColor : .clear))
+                .background(Circle().fill(numberBackground))
                 .overlay(
                     Circle().strokeBorder(
                         isToday && !isSelected ? Color.accentColor : .clear,
                         lineWidth: 1.2)
                 )
-                .foregroundStyle(isSelected ? Color.white : .primary)
-            dot.frame(height: 5)
+                .foregroundStyle(numberForeground)
+            indicator.frame(height: 16)
         }
         .frame(maxWidth: .infinity)
         .opacity(inMonth ? 1 : 0.3)
         .contentShape(Rectangle())
     }
 
-    @ViewBuilder private var dot: some View {
+    private var numberBackground: Color {
+        if isSelected { return .accentColor }
+        if complete { return .green.opacity(0.18) }
+        return .clear
+    }
+
+    private var numberForeground: Color {
+        if isSelected { return .white }
+        if complete { return .green }
+        return .primary
+    }
+
+    @ViewBuilder private var indicator: some View {
         if status.total > 0 {
-            Circle()
-                .fill(status.done == status.total ? Color.secondary : Color.accentColor)
-                .frame(width: 5, height: 5)
+            let tint: Color = complete ? .green : .accentColor
+            let fraction = CGFloat(status.done) / CGFloat(status.total)
+            VStack(spacing: 1) {
+                ZStack(alignment: .leading) {
+                    Capsule().fill(tint.opacity(0.2)).frame(width: 22, height: 3)
+                    Capsule().fill(tint).frame(width: 22 * fraction, height: 3)
+                }
+                Text("\(status.done)/\(status.total)")
+                    .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(complete ? .green : .secondary)
+            }
         } else {
-            Color.clear.frame(width: 5, height: 5)
+            Color.clear
         }
     }
 }
