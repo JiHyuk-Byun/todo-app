@@ -186,35 +186,36 @@ private struct TodoEditRow: View {
     @EnvironmentObject private var store: Store
     let todo: TodoItem
     @State private var showNotes = false
+    @State private var hoveringRow = false
 
     private var isRecurring: Bool { todo.recurringID != nil }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            EditableChecklistRow(
-                title: todo.title,
-                isDone: todo.isDone,
-                recurring: isRecurring,
-                deleteHelp: isRecurring ? "이 날 건너뛰기" : "삭제",
-                onToggle: { store.toggle(todo) },
-                onCommitTitle: { var t = todo; t.title = $0; store.update(t) },
-                onDelete: { store.delete(todo) }   // delete()가 반복 항목은 skip으로 라우팅
-            )
+    /// 메모가 있고, 편집 중이 아니며, 마우스를 올렸을 때 미리보기 표시.
+    private var showPreview: Binding<Bool> {
+        Binding(
+            get: { hoveringRow && !todo.notes.isEmpty && !showNotes },
+            set: { _ in }
+        )
+    }
 
-            if showNotes {
-                TextField("메모", text: notesBinding, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.caption)
-                    .padding(.leading, 28)
-                    .padding(.trailing, 4)
-            } else if !todo.notes.isEmpty {
-                Text(todo.notes)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                    .padding(.leading, 28)
-                    .onTapGesture { showNotes = true }
-            }
+    var body: some View {
+        EditableChecklistRow(
+            title: todo.title,
+            isDone: todo.isDone,
+            recurring: isRecurring,
+            deleteHelp: isRecurring ? "이 날 건너뛰기" : "삭제",
+            hasNote: !todo.notes.isEmpty,
+            onToggleNote: { showNotes.toggle() },
+            onToggle: { store.toggle(todo) },
+            onCommitTitle: { var t = todo; t.title = $0; store.update(t) },
+            onDelete: { store.delete(todo) }   // delete()가 반복 항목은 skip으로 라우팅
+        )
+        .onHover { hoveringRow = $0 }
+        .popover(isPresented: showPreview, arrowEdge: .trailing) {
+            NotePreview(title: todo.title, note: todo.notes)
+        }
+        .popover(isPresented: $showNotes, arrowEdge: .trailing) {
+            NoteEditor(title: todo.title, text: notesBinding)
         }
         .swipeActions(edge: .trailing) {
             Button(role: .destructive) { store.delete(todo) } label: {
@@ -228,7 +229,7 @@ private struct TodoEditRow: View {
         }
         .contextMenu {
             Button(todo.isDone ? "미완료로 표시" : "완료로 표시") { store.toggle(todo) }
-            Button(showNotes ? "메모 숨기기" : "메모 편집") { showNotes.toggle() }
+            Button("메모") { showNotes = true }
             Divider()
             if isRecurring {
                 Button("이 날 건너뛰기", role: .destructive) { store.skipOccurrence(todo) }
@@ -243,6 +244,59 @@ private struct TodoEditRow: View {
             get: { todo.notes },
             set: { var t = todo; t.notes = $0; store.update(t) }
         )
+    }
+}
+
+/// 마우스 올렸을 때 뜨는 메모 미리보기 카드.
+private struct NotePreview: View {
+    let title: String
+    let note: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "note.text").foregroundStyle(Color.accentColor)
+                Text(title.isEmpty ? "메모" : title)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            Text(note)
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .frame(width: 280)
+    }
+}
+
+/// 메모 작성 팝오버. 타이핑 중엔 로컬 상태만 쓰고(한글 IME 보호), 닫을 때 저장한다.
+private struct NoteEditor: View {
+    let title: String
+    @Binding var text: String
+    @State private var draft: String = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title.isEmpty ? "메모" : title)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            TextEditor(text: $draft)
+                .font(.body)
+                .frame(height: 160)
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
+                .focused($focused)
+            Text("닫으면 저장됩니다")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(width: 300)
+        .padding(14)
+        .onAppear { draft = text; focused = true }
+        .onDisappear { text = draft }
     }
 }
 

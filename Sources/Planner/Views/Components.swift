@@ -25,6 +25,8 @@ struct EditableChecklistRow: View {
     var deleteHelp: String = "삭제"
     var pinned: Bool? = nil          // nil이면 핀 버튼 없음
     var onTogglePin: (() -> Void)? = nil
+    var hasNote: Bool? = nil         // nil이면 메모 버튼 없음
+    var onToggleNote: (() -> Void)? = nil
     var onToggle: () -> Void
     var onCommitTitle: (String) -> Void
     var onDelete: () -> Void
@@ -60,6 +62,15 @@ struct EditableChecklistRow: View {
                 Image(systemName: "repeat")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+            }
+            if let hasNote, (hasNote || hovering), !isEditing {
+                Button { onToggleNote?() } label: {
+                    Image(systemName: hasNote ? "note.text" : "square.and.pencil")
+                        .foregroundStyle(hasNote ? Color.accentColor : Color.secondary)
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                .help("메모")
             }
             if let pinned, !isEditing {
                 Button { onTogglePin?() } label: {
