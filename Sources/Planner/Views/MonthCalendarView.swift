@@ -13,6 +13,7 @@ struct MonthCalendarView: View {
     @State private var isOverCalendar = false
     @State private var scrollMonitor: Any?
     @State private var showMonthPicker = false
+    @State private var dropTargetDay: Date?
     private let cal = Calendar.current
 
     var body: some View {
@@ -115,19 +116,53 @@ struct MonthCalendarView: View {
         }
     }
 
+    /// gridDays(42칸)를 7개씩 6주로 나눈다.
+    private var weekRows: [[Date]] {
+        let days = gridDays
+        return stride(from: 0, to: days.count, by: 7).map { Array(days[$0..<min($0 + 7, days.count)]) }
+    }
+
     private var grid: some View {
-        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7),
-                  spacing: 6) {
-            ForEach(gridDays, id: \.self) { day in
-                DayCell(
-                    day: day,
-                    inMonth: cal.isDate(day, equalTo: month, toGranularity: .month),
-                    isToday: cal.isDateInToday(day),
-                    isSelected: cal.isDate(day, inSameDayAs: selection),
-                    status: store.dayStatus(on: day)
-                )
-                .onTapGesture { select(day) }
+        GeometryReader { geo in
+            let spacing: CGFloat = 6
+            let cellW = (geo.size.width - spacing * 6) / 7
+            // 6주 행. 셀 높이는 남는 세로 공간을 균등 분배 → 공간이 줄면 셀도 비율로 작아진다.
+            let cellH = (geo.size.height - spacing * 5) / 6
+            VStack(spacing: spacing) {
+                ForEach(weekRows.indices, id: \.self) { wi in
+                    HStack(spacing: spacing) {
+                        ForEach(weekRows[wi], id: \.self) { day in
+                            cell(day, width: cellW, height: cellH)
+                        }
+                    }
+                }
             }
+            .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .frame(maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private func cell(_ day: Date, width: CGFloat, height: CGFloat) -> some View {
+        DayCell(
+            day: day,
+            inMonth: cal.isDate(day, equalTo: month, toGranularity: .month),
+            isToday: cal.isDateInToday(day),
+            isSelected: cal.isDate(day, inSameDayAs: selection),
+            isDropTarget: dropTargetDay.map { cal.isDate($0, inSameDayAs: day) } ?? false,
+            status: store.dayStatus(on: day),
+            cellWidth: width,
+            cellHeight: height
+        )
+        .frame(width: width, height: height)
+        .onTapGesture { select(day) }
+        .dropDestination(for: String.self) { items, _ in
+            guard let s = items.first, let id = UUID(uuidString: s),
+                  let t = store.todo(id: id) else { return false }
+            store.moveTodo(t, toDay: day)
+            return true
+        } isTargeted: { targeted in
+            dropTargetDay = targeted ? day : nil
         }
     }
 
@@ -222,23 +257,36 @@ private struct MonthYearPicker: View {
     }
 }
 
-/// 캘린더의 한 날짜 칸.
+/// 캘린더의 한 날짜 칸. 할당된 셀 크기(cellWidth/Height)에 맞춰 비율로 작아진다.
 private struct DayCell: View {
     let day: Date
     let inMonth: Bool
     let isToday: Bool
     let isSelected: Bool
+    var isDropTarget: Bool = false
     let status: (total: Int, done: Int)
+    let cellWidth: CGFloat
+    let cellHeight: CGFloat
 
     private let cal = Calendar.current
 
     private var complete: Bool { status.total > 0 && status.done == status.total }
 
+    /// 숫자 원의 지름: 셀 크기에 맞춰 스케일(아래 진행표시 공간 확보, 상·하한 적용).
+    private var circle: CGFloat {
+        let byWidth = cellWidth * 0.82
+        let byHeight = cellHeight - 16          // 아래 진행 표시 영역 확보
+        return min(30, max(15, min(byWidth, byHeight)))
+    }
+
+    /// 진행 표시를 그릴 만큼 셀이 충분히 큰가.
+    private var showIndicator: Bool { cellHeight - circle >= 12 }
+
     var body: some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 2) {
             Text("\(cal.component(.day, from: day))")
-                .font(.system(size: 12, weight: isSelected ? .bold : .regular))
-                .frame(width: 26, height: 26)
+                .font(.system(size: circle * 0.46, weight: isSelected ? .bold : .regular))
+                .frame(width: circle, height: circle)
                 .background(Circle().fill(numberBackground))
                 .overlay(
                     Circle().strokeBorder(
@@ -246,9 +294,13 @@ private struct DayCell: View {
                         lineWidth: 1.2)
                 )
                 .foregroundStyle(numberForeground)
-            indicator.frame(height: 16)
+            if showIndicator { indicator }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isDropTarget ? Color.accentColor.opacity(0.18) : .clear)
+        )
         .opacity(inMonth ? 1 : 0.3)
         .contentShape(Rectangle())
     }
@@ -269,17 +321,16 @@ private struct DayCell: View {
         if status.total > 0 {
             let tint: Color = complete ? .green : .accentColor
             let fraction = CGFloat(status.done) / CGFloat(status.total)
+            let barWidth = min(circle, cellWidth * 0.7)
             VStack(spacing: 1) {
                 ZStack(alignment: .leading) {
-                    Capsule().fill(tint.opacity(0.2)).frame(width: 22, height: 3)
-                    Capsule().fill(tint).frame(width: 22 * fraction, height: 3)
+                    Capsule().fill(tint.opacity(0.2)).frame(width: barWidth, height: 3)
+                    Capsule().fill(tint).frame(width: barWidth * fraction, height: 3)
                 }
                 Text("\(status.done)/\(status.total)")
                     .font(.system(size: 9, weight: .semibold).monospacedDigit())
                     .foregroundStyle(complete ? .green : .secondary)
             }
-        } else {
-            Color.clear
         }
     }
 }

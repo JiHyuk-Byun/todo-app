@@ -10,10 +10,11 @@ struct SchedulerView: View {
     // 본문(배너+탭+달력)이 필요로 하는 기본 높이.
     private let baseHeight: CGFloat = 540
 
+    private var screenCap: CGFloat { (NSScreen.main?.visibleFrame.height ?? 1000) - 60 }
+
     /// 화면 안에서 고정목표가 차지할 수 있는 최대 높이.
     private var pinnedAllowed: CGFloat {
-        let screen = (NSScreen.main?.visibleFrame.height ?? 1000) - 60
-        return max(120, screen - baseHeight)
+        max(120, screenCap - baseHeight)
     }
 
     /// 고정목표 내용 높이(라벨+행).
@@ -22,9 +23,10 @@ struct SchedulerView: View {
         return count > 0 ? CGFloat(count) * 30 + 30 : 0
     }
 
-    /// 핀 개수에 따라 커지는 창 최소 높이(화면 상한 내).
+    /// 핀에 따라 커지는 창 최소 높이(화면 상한 내).
+    /// 반복 펼침은 달력이 공간을 흡수하므로 창 높이에 영향 주지 않는다.
     private var dynamicMinHeight: CGFloat {
-        baseHeight + min(pinnedContentHeight, pinnedAllowed)
+        min(baseHeight + min(pinnedContentHeight, pinnedAllowed), screenCap)
     }
 
     var body: some View {
@@ -75,10 +77,11 @@ struct SchedulerView: View {
 
     private var schedulePane: some View {
         HSplitView {
-            // 왼쪽: 달력 + (아래) 반복 일정
+            // 왼쪽: 달력(남는 공간 채움) + (아래) 반복 일정(내용 높이)
             VStack(spacing: 0) {
                 MonthCalendarView(selection: $selectedDay)
                     .padding(16)
+                    .frame(maxHeight: .infinity)
                 Divider()
                 RecurringPanel()
             }
@@ -211,6 +214,7 @@ private struct TodoEditRow: View {
             onDelete: { store.delete(todo) }   // delete()가 반복 항목은 skip으로 라우팅
         )
         .onHover { hoveringRow = $0 }
+        .onDrag { NSItemProvider(object: todo.id.uuidString as NSString) }
         .popover(isPresented: showPreview, arrowEdge: .trailing) {
             NotePreview(title: todo.title, note: todo.notes)
         }
@@ -306,11 +310,29 @@ private struct RecurringPanel: View {
     @EnvironmentObject private var store: Store
     @State private var showingNew = false
     @State private var editingRule: RecurringRule?
+    @AppStorage("recurringExpanded") private var expanded = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("반복 일정").font(.title3.bold())
+            HStack(spacing: 6) {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { expanded.toggle() }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("반복 일정").font(.title3.bold())
+                        if !store.rules.isEmpty {
+                            Text("\(store.rules.count)")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
                 Spacer()
                 Button { showingNew = true } label: {
                     Image(systemName: "plus")
@@ -319,15 +341,21 @@ private struct RecurringPanel: View {
                 .help("새 반복 일정")
             }
 
-            if store.rules.isEmpty {
-                emptyState
-            } else {
-                List {
-                    ForEach(store.rules) { rule in
-                        RuleRow(rule: rule) { editingRule = rule }
+            if expanded {
+                if store.rules.isEmpty {
+                    emptyState
+                } else {
+                    // 자연 높이 행. 많으면 내부 스크롤(최대 300). 달력이 나머지 공간을 채운다.
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(Array(store.rules.enumerated()), id: \.element.id) { idx, rule in
+                                RuleRow(rule: rule) { editingRule = rule }
+                                if idx < store.rules.count - 1 { Divider() }
+                            }
+                        }
                     }
+                    .frame(maxHeight: 300)
                 }
-                .listStyle(.inset)
             }
         }
         .padding(16)
@@ -338,7 +366,7 @@ private struct RecurringPanel: View {
     private var emptyState: some View {
         VStack(spacing: 8) {
             Image(systemName: "repeat")
-                .font(.system(size: 28))
+                .font(.system(size: 24))
                 .foregroundStyle(.tertiary)
             Text("반복 일정이 없습니다")
                 .foregroundStyle(.secondary)
@@ -347,7 +375,8 @@ private struct RecurringPanel: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.tertiary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
     }
 }
 

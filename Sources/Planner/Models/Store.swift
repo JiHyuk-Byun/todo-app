@@ -162,6 +162,28 @@ final class Store: ObservableObject {
         save()
     }
 
+    func todo(id: UUID) -> TodoItem? { data.todos.first { $0.id == id } }
+
+    /// 할 일을 다른 날짜로 이동(달력 드롭). 반복 생성분은 분리(원래 날짜는 건너뛰기 처리).
+    func moveTodo(_ todo: TodoItem, toDay day: Date) {
+        guard let idx = data.todos.firstIndex(where: { $0.id == todo.id }) else { return }
+        let target = calendar.startOfDay(for: day)
+        if calendar.isDate(data.todos[idx].day, inSameDayAs: target) { return }
+
+        if let rid = data.todos[idx].recurringID {
+            if let r = data.rules.firstIndex(where: { $0.id == rid }) {
+                data.rules[r].skippedDates.insert(calendar.startOfDay(for: todo.day))
+            }
+            data.todos[idx].recurringID = nil   // 규칙에서 분리된 단독 할 일로
+        }
+        let maxIdx = data.todos
+            .filter { calendar.isDate($0.day, inSameDayAs: target) && $0.id != todo.id }
+            .map(\.sortIndex).max() ?? -1
+        data.todos[idx].day = target
+        data.todos[idx].sortIndex = maxIdx + 1
+        save()
+    }
+
     /// 드래그로 순서 변경(카테고리 섹션 내에서).
     func moveTodos(on day: Date, category: TodoCategory,
                    from source: IndexSet, to destination: Int) {

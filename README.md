@@ -5,14 +5,14 @@ A lightweight macOS menu‑bar app for daily focus: check off today's tasks, tra
 ## Features
 
 ### Menu‑bar dropdown
-- Click the menu‑bar icon (or a global hotkey) to open a dropdown showing **today's tasks**, grouped into **영성 (spirituality)** and **전문성 (professionalism)** sections, each with its own quick‑add field.
+- Click the menu‑bar icon (or a global hotkey) to open a dropdown showing **today's tasks**, grouped into two categories, each with its own quick‑add field.
 - Check items off with satisfying feedback: **haptics, a bouncing checkmark, and a small confetti burst** per check; a **full confetti** celebration when a day is 100% complete.
 - A pinned **"오늘의 말씀" (today's scripture)** banner and a **pinned‑goals** strip stay at the top.
 - **🔥 streak chips** (tasks / scripture) in the header.
 
 ### Scheduler window — `[일정 | 목표 | 말씀 | 통계]`
 - **일정 (Schedule):** a custom month calendar (per‑day completion shown as `done/total` + a mini progress bar, fully‑done days highlighted green) on the left with recurring rules below; the selected day's tasks on the right with inline edit, drag‑to‑reorder, swipe / right‑click actions, and notes.
-- **목표 (Goals):** weekly / monthly / yearly / vision checklists, each split into 영성 / 전문성, with drag‑to‑reorder. Periods roll over automatically.
+- **목표 (Goals):** weekly / monthly / yearly / vision checklists, each split into two categories, with drag‑to‑reorder. Periods roll over automatically.
 - **말씀 (Scripture memorization):** register the day's verse, then recite it from memory — the original is hidden while you type; on submit it's an **exact match** (every character and space) to earn a credit, otherwise nothing. Includes a peek button, edit, and a history of past verses.
 - **통계 (Stats):** task & scripture streaks, weekly completion rate, totals, and a grid of **achievement badges**.
 

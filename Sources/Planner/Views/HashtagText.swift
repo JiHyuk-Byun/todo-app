@@ -208,7 +208,8 @@ struct HashtagTextField: NSViewRepresentable {
     func updateNSView(_ nsView: PillNSTextView, context: Context) {
         context.coordinator.parent = self
         nsView.placeholder = placeholder
-        if context.coordinator.modelString() != text {
+        // 조합 중(marked text)엔 다시 그리지 않는다 — 한글 입력 깨짐 방지.
+        if !nsView.hasMarkedText(), context.coordinator.modelString() != text {
             context.coordinator.render(text)
         }
     }
@@ -296,6 +297,11 @@ struct HashtagTextField: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let tv = textView, !isMutating else { return }
+            // 한글 등 IME 조합 중에는 textStorage를 건드리지 않는다(조합 깨짐 방지).
+            if tv.hasMarkedText() {
+                parent.text = modelString()
+                return
+            }
             isMutating = true
             convertCompleted(tv)
             isMutating = false

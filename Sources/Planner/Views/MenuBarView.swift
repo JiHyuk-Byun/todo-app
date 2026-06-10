@@ -231,9 +231,17 @@ private struct TodoRow: View {
             if !todo.isDone { Haptics.success() }
             store.toggle(todo)
         } label: {
-            HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 CheckCircle(isDone: todo.isDone)
-                HashtagLabel(text: todo.title, isDone: todo.isDone)
+                VStack(alignment: .leading, spacing: 2) {
+                    HashtagLabel(text: todo.title, isDone: todo.isDone)
+                    if !todo.notes.isEmpty {
+                        Label(todo.notes, systemImage: "note.text")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
                 Spacer()
                 if todo.recurringID != nil {
                     Image(systemName: "repeat")
