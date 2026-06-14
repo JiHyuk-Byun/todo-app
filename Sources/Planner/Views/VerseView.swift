@@ -64,6 +64,7 @@ struct VerseView: View {
     @State private var draftText = ""
     @State private var draftRef = ""
     @State private var confetti = 0
+    @StateObject private var attemptCtl = IMETextController()
 
     private var verse: Verse? { store.todayVerse() }
     private var showEditor: Bool { verse == nil || editing }
@@ -173,7 +174,7 @@ struct VerseView: View {
             }
 
             Text("암송 입력").font(.caption).foregroundStyle(.secondary)
-            IMETextEditor(text: $attempt)
+            IMETextEditor(text: $attempt, controller: attemptCtl)
                 .frame(minHeight: 140)
                 .padding(6)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
@@ -204,17 +205,15 @@ struct VerseView: View {
     // MARK: 동작
 
     private func submit() {
-        // 한글 IME가 조합 중(밑줄 친 글자)이면 아직 attempt 바인딩에 반영되지 않았다.
-        // first responder를 내려 조합을 확정시킨 뒤, 갱신된 값으로 비교한다.
-        NSApp.keyWindow?.makeFirstResponder(nil)
-        DispatchQueue.main.async {
-            let ok = store.recite(attempt, on: Date())
-            lastResult = ok
-            if ok {
-                Haptics.success()
-                confetti += 1
-                attempt = ""        // 정답이면 입력 내용 비우기
-            }
+        // 텍스트뷰에서 직접 읽는다 — 조합 중인 글자까지 화면 그대로(바인딩 타이밍 의존 X).
+        let typed = attemptCtl.currentText()
+        let ok = store.recite(typed, on: Date())
+        lastResult = ok
+        if ok {
+            Haptics.success()
+            confetti += 1
+            attemptCtl.clear()   // 정답이면 입력 비우기(조합 폐기 + 초기화)
+            attempt = ""
         }
     }
 

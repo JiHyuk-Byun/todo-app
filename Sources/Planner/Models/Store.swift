@@ -381,6 +381,59 @@ final class Store: ObservableObject {
     func completedTodoCount() -> Int { data.todos.filter(\.isDone).count }
     func completedGoalCount() -> Int { data.goals.filter(\.isDone).count }
 
+    // MARK: - 완료 기록(통계 아카이브, 읽기 전용)
+
+    /// 외운 말씀(credit>0), 날짜 최신순.
+    func completedVerses() -> [Verse] {
+        data.verses.filter { $0.credits > 0 }.sorted { $0.day > $1.day }
+    }
+
+    /// 완료한 할 일을 날짜(자정 기준)별로 묶어 최신순. 그룹 내부는 카테고리→생성순.
+    func completedTodosByDay() -> [(day: Date, items: [TodoItem])] {
+        let done = data.todos.filter(\.isDone)
+        let groups = Dictionary(grouping: done) { calendar.startOfDay(for: $0.day) }
+        return groups.keys.sorted(by: >).map { day in
+            let items = groups[day]!.sorted {
+                if $0.category != $1.category {
+                    return categoryOrder($0.category) < categoryOrder($1.category)
+                }
+                return $0.createdAt < $1.createdAt
+            }
+            return (day, items)
+        }
+    }
+
+    /// 기록에 남길 목표를 (기간)별로 묶음.
+    /// 포함: 달성한 목표(아무 기간) + 기간이 지난 목표(달성/미달성 모두).
+    /// 제외: 현재 기간의 진행 중(미달성) 목표 — 아직 목표 탭에서 진행 중.
+    func archivedGoalsByPeriod() -> [(horizon: GoalHorizon, periodKey: String, items: [GoalItem])] {
+        let current = Dictionary(uniqueKeysWithValues:
+            GoalHorizon.allCases.map { ($0, currentPeriodKey($0)) })
+        let filtered = data.goals.filter { g in
+            let isPast = g.horizon != .vision && g.periodKey != (current[g.horizon] ?? "")
+            return g.isDone || isPast
+        }
+        var buckets: [String: (horizon: GoalHorizon, periodKey: String, items: [GoalItem])] = [:]
+        for g in filtered {
+            let key = "\(g.horizon.rawValue)|\(g.periodKey)"
+            buckets[key, default: (g.horizon, g.periodKey, [])].items.append(g)
+        }
+        func order(_ h: GoalHorizon) -> Int { GoalHorizon.allCases.firstIndex(of: h) ?? 0 }
+        return buckets.values
+            .map { b in
+                (b.horizon, b.periodKey,
+                 b.items.sorted { ($0.sortIndex, $0.createdAt) < ($1.sortIndex, $1.createdAt) })
+            }
+            .sorted { a, b in
+                if a.horizon != b.horizon { return order(a.horizon) < order(b.horizon) }
+                return a.periodKey > b.periodKey
+            }
+    }
+
+    private func categoryOrder(_ c: TodoCategory) -> Int {
+        TodoCategory.allCases.firstIndex(of: c) ?? 0
+    }
+
     /// 그날 materialized todo가 ≥1이고 전부 완료.
     func dayFullyDone(_ day: Date) -> Bool {
         let items = data.todos.filter { calendar.isDate($0.day, inSameDayAs: day) }

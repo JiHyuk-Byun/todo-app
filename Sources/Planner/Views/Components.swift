@@ -147,11 +147,30 @@ struct QuickAddField: View {
     }
 }
 
+/// 텍스트뷰를 단일 진실 소스로 노출하는 컨트롤러.
+/// 제출 시 바인딩(타이밍 의존)이 아니라 여기서 직접 읽으면 조합 중 글자까지 정확하다.
+final class IMETextController: ObservableObject {
+    weak var textView: NSTextView?
+
+    /// 화면에 보이는 그대로의 현재 텍스트(조합 중인 글자 포함).
+    func currentText() -> String { textView?.string ?? "" }
+
+    /// 입력 비우기(조합 폐기 후 초기화).
+    func clear() {
+        guard let tv = textView else { return }
+        tv.inputContext?.discardMarkedText()
+        tv.string = ""
+    }
+
+    func focus() { textView?.window?.makeFirstResponder(textView) }
+}
+
 /// 한글 IME 안전 멀티라인 텍스트 에디터.
 /// 조합 중(marked text)일 때는 외부 갱신이 텍스트를 덮어쓰지 않아,
 /// store의 objectWillChange(60초 타이머 등)로 재렌더돼도 입력 중 한글이 지워지지 않는다.
 struct IMETextEditor: NSViewRepresentable {
     @Binding var text: String
+    var controller: IMETextController? = nil
     var minHeight: CGFloat = 140
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -176,6 +195,7 @@ struct IMETextEditor: NSViewRepresentable {
         scroll.hasVerticalScroller = true
         scroll.borderType = .noBorder
         context.coordinator.textView = tv
+        controller?.textView = tv
         return scroll
     }
 
@@ -193,8 +213,9 @@ struct IMETextEditor: NSViewRepresentable {
 
         func textDidChange(_ notification: Notification) {
             guard let tv = notification.object as? NSTextView else { return }
-            // 조합 중간값은 바인딩에 쓰지 않는다 → 확정될 때 textDidChange가 다시 불려 반영됨.
-            if tv.hasMarkedText() { return }
+            // 조합 중(marked)인 글자까지 포함해 현재 텍스트를 그대로 반영한다.
+            // → 마지막 글자가 조합 중인 채로 제출해도 보이는 그대로 비교됨.
+            // 삭제 버그는 updateNSView의 hasMarkedText 가드가 막으므로 여기선 안 막아도 안전.
             parent.text = tv.string
         }
     }
