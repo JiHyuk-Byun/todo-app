@@ -232,6 +232,12 @@ final class Store: ObservableObject {
         materializeRecurring(for: day)
     }
 
+    /// 드롭다운을 열 때 등, "오늘" 기준을 즉시 새로고침한다(자정 경과 반영).
+    func refreshNow() {
+        materializeRecurring(for: Date())
+        objectWillChange.send()
+    }
+
     private func materializeRecurring(for day: Date) {
         let target = calendar.startOfDay(for: day)
         let dayItems = data.todos.filter { calendar.isDate($0.day, inSameDayAs: target) }

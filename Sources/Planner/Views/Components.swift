@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 완료 토글용 원형 체크 아이콘.
 struct CheckCircle: View {
@@ -143,5 +144,58 @@ struct QuickAddField: View {
         guard !trimmed.isEmpty else { return }
         onAdd(trimmed)
         text = ""
+    }
+}
+
+/// 한글 IME 안전 멀티라인 텍스트 에디터.
+/// 조합 중(marked text)일 때는 외부 갱신이 텍스트를 덮어쓰지 않아,
+/// store의 objectWillChange(60초 타이머 등)로 재렌더돼도 입력 중 한글이 지워지지 않는다.
+struct IMETextEditor: NSViewRepresentable {
+    @Binding var text: String
+    var minHeight: CGFloat = 140
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let tv = NSTextView()
+        tv.delegate = context.coordinator
+        tv.isRichText = false
+        tv.allowsUndo = true
+        tv.font = .preferredFont(forTextStyle: .body)
+        tv.textColor = .labelColor
+        tv.drawsBackground = false
+        tv.textContainerInset = NSSize(width: 4, height: 6)
+        tv.string = text
+        tv.autoresizingMask = [.width]
+        tv.isVerticallyResizable = true
+        tv.textContainer?.widthTracksTextView = true
+
+        let scroll = NSScrollView()
+        scroll.documentView = tv
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.borderType = .noBorder
+        context.coordinator.textView = tv
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let tv = scroll.documentView as? NSTextView else { return }
+        // 조합 중이면 건드리지 않는다(IME 보호). 값이 다를 때만 반영.
+        if tv.hasMarkedText() { return }
+        if tv.string != text { tv.string = text }
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: IMETextEditor
+        weak var textView: NSTextView?
+        init(_ parent: IMETextEditor) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let tv = notification.object as? NSTextView else { return }
+            // 조합 중간값은 바인딩에 쓰지 않는다 → 확정될 때 textDidChange가 다시 불려 반영됨.
+            if tv.hasMarkedText() { return }
+            parent.text = tv.string
+        }
     }
 }

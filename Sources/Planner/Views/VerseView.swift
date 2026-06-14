@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 // MARK: - 최상단 "오늘의 말씀" 배너
 
@@ -118,8 +119,7 @@ struct VerseView: View {
                 .textFieldStyle(.roundedBorder)
 
             Text("원문").font(.caption).foregroundStyle(.secondary)
-            TextEditor(text: $draftText)
-                .font(.body)
+            IMETextEditor(text: $draftText)
                 .frame(minHeight: 140)
                 .padding(6)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
@@ -173,8 +173,7 @@ struct VerseView: View {
             }
 
             Text("암송 입력").font(.caption).foregroundStyle(.secondary)
-            TextEditor(text: $attempt)
-                .font(.body)
+            IMETextEditor(text: $attempt)
                 .frame(minHeight: 140)
                 .padding(6)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(.quaternary))
@@ -205,12 +204,17 @@ struct VerseView: View {
     // MARK: 동작
 
     private func submit() {
-        let ok = store.recite(attempt, on: Date())
-        lastResult = ok
-        if ok {
-            Haptics.success()
-            confetti += 1
-            attempt = ""        // 정답이면 입력 내용 비우기
+        // 한글 IME가 조합 중(밑줄 친 글자)이면 아직 attempt 바인딩에 반영되지 않았다.
+        // first responder를 내려 조합을 확정시킨 뒤, 갱신된 값으로 비교한다.
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        DispatchQueue.main.async {
+            let ok = store.recite(attempt, on: Date())
+            lastResult = ok
+            if ok {
+                Haptics.success()
+                confetti += 1
+                attempt = ""        // 정답이면 입력 내용 비우기
+            }
         }
     }
 

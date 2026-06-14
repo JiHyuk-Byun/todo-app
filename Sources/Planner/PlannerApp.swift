@@ -17,7 +17,7 @@ struct PlannerApp: App {
 
 /// 메뉴바 상태 아이템 + 드롭다운 팝오버 + 스케줄러 창 + 전역 단축키를 관리한다.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     static private(set) var shared: AppDelegate?
 
     private let store = Store.shared
@@ -39,6 +39,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { self?.updateStatusTitle() }
         }
         updateStatusTitle()
+    }
+
+    /// 메뉴바 전용 앱이므로 스케줄러·설정 창을 모두 닫아도 앱은 종료되면 안 된다.
+    /// (SwiftUI 기본 동작은 마지막 창이 닫히면 앱을 종료시킨다 → 여기서 막는다.)
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    /// 스케줄러 창을 닫으면 다시 메뉴바 전용(액세서리)으로 — Dock 아이콘 제거.
+    func windowWillClose(_ notification: Notification) {
+        if (notification.object as? NSWindow) === schedulerWindow {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 
     // MARK: - Status item + popover
@@ -72,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else if let button = statusItem.button {
+            store.refreshNow()   // 자정 경과 후 "오늘"로 즉시 갱신
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
@@ -92,19 +106,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             w.styleMask = [.titled, .closable, .miniaturizable, .resizable]
             w.setContentSize(NSSize(width: 960, height: 760))
             w.isReleasedWhenClosed = false
+            w.delegate = self
             w.center()
             schedulerWindow = w
         }
+        // 일반 앱 창처럼 다룬다(Cmd-Tab·재선택 가능) → 다른 앱 갔다가 돌아오기 쉬움.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         schedulerWindow?.makeKeyAndOrderFront(nil)
     }
 
     func toggleScheduler() {
-        if let w = schedulerWindow, w.isVisible {
-            w.orderOut(nil)
-        } else {
+        guard let w = schedulerWindow, w.isVisible else {
             showScheduler()
+            return
         }
+        if w.isKeyWindow {
+            hideScheduler()          // 앞에 있을 때만 숨김
+        } else {
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+            w.makeKeyAndOrderFront(nil)   // 뒤에 있으면 앞으로
+        }
+    }
+
+    private func hideScheduler() {
+        schedulerWindow?.orderOut(nil)
+        NSApp.setActivationPolicy(.accessory)   // 다시 메뉴바 전용
     }
 
     /// 드롭다운 메뉴의 "스케줄러" 버튼용 — 팝오버 닫고 창 표시.

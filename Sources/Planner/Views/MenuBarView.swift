@@ -6,7 +6,9 @@ struct MenuBarView: View {
     @EnvironmentObject private var store: Store
 
     @State private var expanded: Set<GoalHorizon> = []
-    @State private var now = Date()
+    // 항상 현재 날짜를 반영(자정 경과 후에도 "오늘"로 갱신). 프레임 고정용 @State가 아니다.
+    // Store가 60초마다, 그리고 드롭다운 열 때 refreshNow()로 objectWillChange를 보내 재평가된다.
+    private var now: Date { Date() }
     @State private var measuredHeight: CGFloat = 220   // 실시간 측정값(프레임엔 직접 안 씀)
     @State private var contentHeight: CGFloat = 220    // 실제 적용 높이(구조 변경 시에만 갱신)
     @State private var initializedHeight = false

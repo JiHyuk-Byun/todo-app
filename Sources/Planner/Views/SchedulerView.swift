@@ -106,6 +106,9 @@ private struct DayTodoList: View {
 
     private var todos: [TodoItem] { store.todos(on: day) }
 
+    /// 날짜별로 빠른추가 입력칸을 구분(날짜 바뀌면 입력 중 텍스트 초기화).
+    private var dayID: Int { Int(Calendar.current.startOfDay(for: day).timeIntervalSinceReferenceDate) }
+
     private var dayAllDone: Bool {
         let s = store.dayStatus(on: day)
         return s.total > 0 && s.done == s.total
@@ -126,7 +129,7 @@ private struct DayTodoList: View {
                         QuickAddField(placeholder: "\(category.label) 할 일 추가…") {
                             store.addTodo(title: $0, on: day, category: category)
                         }
-                        .id("todoadd-\(category.rawValue)")
+                        .id("todoadd-\(category.rawValue)-\(dayID)")
                     } header: {
                         categoryHeader(category)
                     }
@@ -139,6 +142,19 @@ private struct DayTodoList: View {
                 }
             }
             .animation(.snappy(duration: 0.2), value: todos)
+            // 메모 미리보기를 입력 차단 없는 오버레이로 그린다(떠 있어도 행 드래그 가능).
+            .overlayPreferenceValue(NotePreviewKey.self) { data in
+                GeometryReader { proxy in
+                    if let data {
+                        let rect = proxy[data.bounds]
+                        NotePreview(title: data.title, note: data.note)
+                            .fixedSize()
+                            .offset(x: max(8, rect.minX), y: rect.maxY + 4)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
+                }
+                .allowsHitTesting(false)
+            }
         }
         .padding(16)
         .overlay(ConfettiView(trigger: confetti))
@@ -190,15 +206,21 @@ private struct TodoEditRow: View {
     let todo: TodoItem
     @State private var showNotes = false
     @State private var hoveringRow = false
+    @State private var previewArmed = false   // 잠깐 머문 뒤에만 미리보기(드래그로 잡을 땐 안 뜸)
+    @State private var dragging = false        // 드래그 중엔 미리보기 억제
 
     private var isRecurring: Bool { todo.recurringID != nil }
 
-    /// 메모가 있고, 편집 중이 아니며, 마우스를 올렸을 때 미리보기 표시.
-    private var showPreview: Binding<Bool> {
-        Binding(
-            get: { hoveringRow && !todo.notes.isEmpty && !showNotes },
-            set: { _ in }
-        )
+    /// 메모가 있고, 편집 중/드래그 중이 아니며, 잠깐 머물렀을 때만 미리보기 표시.
+    private var previewActive: Bool {
+        previewArmed && hoveringRow && !dragging && !todo.notes.isEmpty && !showNotes
+    }
+
+    /// 호버 후 잠깐(0.45s) 머물면 미리보기를 켠다. 드래그로 바로 잡으면 안 뜬다.
+    private func armPreview() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            if hoveringRow && !dragging && !showNotes { previewArmed = true }
+        }
     }
 
     var body: some View {
@@ -213,10 +235,25 @@ private struct TodoEditRow: View {
             onCommitTitle: { var t = todo; t.title = $0; store.update(t) },
             onDelete: { store.delete(todo) }   // delete()가 반복 항목은 skip으로 라우팅
         )
-        .onHover { hoveringRow = $0 }
-        .onDrag { NSItemProvider(object: todo.id.uuidString as NSString) }
-        .popover(isPresented: showPreview, arrowEdge: .trailing) {
-            NotePreview(title: todo.title, note: todo.notes)
+        .onHover { hovering in
+            hoveringRow = hovering
+            if hovering {
+                armPreview()
+            } else {
+                previewArmed = false
+                dragging = false
+            }
+        }
+        .onDrag {
+            dragging = true        // 드래그 시작 → 미리보기 숨김(오버레이는 입력을 막지 않음)
+            previewArmed = false
+            return NSItemProvider(object: todo.id.uuidString as NSString)
+        }
+        // 미리보기는 입력을 가로채지 않는 오버레이로 띄운다(컨테이너에서 그림) → 떠 있어도 드래그 가능.
+        .anchorPreference(key: NotePreviewKey.self, value: .bounds) { anchor in
+            previewActive
+                ? NotePreviewData(id: todo.id, title: todo.title, note: todo.notes, bounds: anchor)
+                : nil
         }
         .popover(isPresented: $showNotes, arrowEdge: .trailing) {
             NoteEditor(title: todo.title, text: notesBinding)
@@ -272,6 +309,27 @@ private struct NotePreview: View {
         }
         .padding(12)
         .frame(width: 280)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(.regularMaterial)
+                .shadow(color: .black.opacity(0.18), radius: 8, y: 3)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+    }
+}
+
+/// 메모 미리보기 오버레이용 데이터(행 위치 anchor 포함).
+private struct NotePreviewData: Equatable {
+    let id: UUID
+    let title: String
+    let note: String
+    let bounds: Anchor<CGRect>
+}
+
+private struct NotePreviewKey: PreferenceKey {
+    static let defaultValue: NotePreviewData? = nil
+    static func reduce(value: inout NotePreviewData?, nextValue: () -> NotePreviewData?) {
+        if let next = nextValue() { value = next }
     }
 }
 
